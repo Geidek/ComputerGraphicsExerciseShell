@@ -43,6 +43,14 @@ FetchContent_MakeAvailable(glm)
 # Kopiert den gesamten 'shaders'-Ordner in das Build-Verzeichnis
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shaders DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
+set(SOURCES
+    project/main.cpp
+    project/Shader.cpp
+    project/Mesh.cpp
+    project/SceneGraph.cpp
+    project/Camera.cpp
+    project/Texture.cpp
+)
 
 # Include sub-projects.
 add_subdirectory(imported)

@@ -10,6 +10,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "Shader.h"
+#include "Mesh.h"
 
 // frame buffer size callback is needed to resize the window
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -31,21 +33,6 @@ void InitGLFWSetOpenGLVersionAndExtensionHints()
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	//Only for MacOS
 	//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-}
-
-std::string loadShaderSource(const char* filepath) {
-	std::ifstream file;
-	std::stringstream buffer;
-
-	file.open(filepath);
-	if (file.is_open()) {
-		buffer << file.rdbuf();
-		file.close();
-	}
-	else {
-		std::cerr << "Konnte Datei nicht öffnen: " << filepath << std::endl;
-	}
-	return buffer.str();
 }
 
 
@@ -82,91 +69,69 @@ int main()
 	// Framebuffer size callback to resize the window
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-	// Vertex-Shader Quellcode
-	const char* vertexShaderSource =
-		"#version 330 core\n"
-		"layout (location = 0) in vec3 aPos;\n"
-		"layout (location = 1) in vec3 aCol;\n"
-		"out vec4 vertexColor;\n"
-		"void main() {\n"
-		"   gl_Position = vec4(aPos, 1.0);\n"
-		"   vertexColor = vec4(aCol, 1.0);\n"
-		"}\0";
+	// Einfaches Vertex- und Fragment-Shader-Source (als String)
+	const std::string vertexShaderSource = R"(
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        layout (location = 1) in vec3 aColor;
+        out vec3 ourColor;
+        uniform mat4 model;
+        uniform mat4 view;
+        uniform mat4 projection;
+        void main() {
+            gl_Position = projection * view * model * vec4(aPos, 1.0);
+            ourColor = aColor;
+        }
+    )";
 
-	// Fragment-Shader Quellcode
-	const char* fragmentShaderSource = "#version 330 core\n"
-		"out vec4 FragColor;\n"
-		"in vec4 vertexColor;\n"
-		"void main() {\n"
-		"   FragColor = vertexColor;\n"
-		"}\0";
+	const std::string fragmentShaderSource = R"(
+        #version 330 core
+        in vec3 ourColor;
+        out vec4 FragColor;
+        void main() {
+            FragColor = vec4(ourColor, 1.0);
+        }
+    )";
 
+	// Erstelle den Shader aus den Source-Strings
+	Shader shader(vertexShaderSource, fragmentShaderSource);
 
-	// Kompiliere den Vertex-Shader
-	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
-
-
-	// Kompiliere den Fragment-Shader
-	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragmentShader);
-
-
-	// Verlinke die Shader zu einem Shaderprogramm
-	unsigned int shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-
-
-	// Lösche die Shader, da sie im Programm bereits verlinkt sind
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
-
-	float vertices[] = {
-		// Position (x,y,z)   // Farbe (r,g,b)
-		 0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,  // oben rechts
-		 0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,  // unten rechts
-		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,  // unten links
-		-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 1.0f   // oben links
+	// Beispiel-Daten: Ein Quadrat bestehend aus 4 Punkten und 2 Dreiecken (Index-Puffer)
+	std::vector<float> vertices = {
+		// Position             // Farbe
+		 0.5f,  0.5f, 0.0f,     1.0f, 0.0f, 0.0f,  // rechts oben
+		 0.5f, -0.5f, 0.0f,     0.0f, 1.0f, 0.0f,  // rechts unten
+		-0.5f, -0.5f, 0.0f,     0.0f, 0.0f, 1.0f,  // links unten
+		-0.5f,  0.5f, 0.0f,     1.0f, 1.0f, 1.0f   // links oben
 	};
 
-
-	// Indizes, die die beiden Dreiecke definieren, welche das Rechteck bilden
-	unsigned int indices[] = {
-		0, 1, 3,  // erstes Dreieck
-		1, 2, 3   // zweites Dreieck
+	std::vector<uint32_t> indices = {
+		0, 1, 3,  // Erstes Dreieck
+		1, 2, 3   // Zweites Dreieck
 	};
 
-	unsigned int VBO, VAO, EBO;
-	// Erzeuge ein Vertex Array Object, einen Vertex Buffer Object und ein Element Buffer Object
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
+	// Beschreibe das Layout: Zuerst 3 Float für Position, dann 3 Float für Farbe
+	std::vector<Mesh::Attribute> vertexLayout = {
+		{ GL_FLOAT, 3 },
+		{ GL_FLOAT, 3 }
+	};
 
-	// Binde das VAO, dann den VBO und kopiere die Vertex-Daten in den Puffer
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	Mesh mesh(vertices, indices, vertexLayout);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+	// Setze einen einfachen Model-, View- und Projection-Uniform
+	// (Für einen echten Anwendungscode würden hier etwa Kameras und Transformationen eingesetzt)
+	shader.use();
+	// Hier setzen wir mal Identitätsmatrizen; in einem echten Szenengraphen wären hier die entsprechenden Matrizen
+	float identity[16] = {
+		1,0,0,0,
+		0,1,0,0,
+		0,0,1,0,
+		0,0,0,1
+	};
+	glUniformMatrix4fv(glGetUniformLocation(shader.GetProgramId(), "model"), 1, GL_FALSE, identity);
+	glUniformMatrix4fv(glGetUniformLocation(shader.GetProgramId(), "view"), 1, GL_FALSE, identity);
+	glUniformMatrix4fv(glGetUniformLocation(shader.GetProgramId(), "projection"), 1, GL_FALSE, identity);
 
-	// Definiere, wie die Vertex-Daten interpretiert werden sollen
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	glBindVertexArray(0);
-
-	// Enable Wireframe Mode = draw only the edges of the triangles
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-	// Disable Wireframe Mode = fill the triangles
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 
 	// Setup Imgui context
@@ -206,17 +171,10 @@ int main()
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		// Verwende das Shaderprogramm und zeichne das Dreieck
-		glUseProgram(shaderProgram);
+		// use the shader program
+		shader.use();
+		mesh.Draw();
 
-		// update the uniform color
-		float timeValue = glfwGetTime();
-		float strength = cos(timeValue) / 2.0f + 0.5f;
-		int vertexColorLocation = glGetUniformLocation(shaderProgram, "strength");
-		glUniform1f(vertexColorLocation, strength);
-
-		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -229,11 +187,6 @@ int main()
 
 
 	}
-	// Ressourcen freigeben
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VBO);
-	glDeleteBuffers(1, &EBO);
-	glDeleteProgram(shaderProgram);
 
 	// terminate glfw to enshure clean shutdown
 	glfwTerminate();
