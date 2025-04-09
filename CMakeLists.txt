@@ -40,6 +40,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+# Kopiert den gesamten 'shaders'-Ordner in das Build-Verzeichnis
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shaders DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+
 # Include sub-projects.
 add_subdirectory(imported)
 add_subdirectory(project)

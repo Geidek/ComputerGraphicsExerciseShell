@@ -24,6 +24,7 @@ namespace {
 
 Shader::Shader(const std::string_view vertexShaderName, const std::string_view fragmentShaderName)
 {
+
 	// Compile Vertex shader
 	
 
